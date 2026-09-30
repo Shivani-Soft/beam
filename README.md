@@ -58,6 +58,47 @@ two tabs just exchange arbitrary broadcast messages over a shared room channel.
 > is actually there) is deferred to Milestone 6 — see the comment in
 > `hooks/useSignalingChannel.ts`.
 
+## Milestone 2: WebRTC peer connection
+
+This milestone adds the actual WebRTC layer on top of Milestone 1's signaling.
+An `RTCPeerConnection` is established using the existing Supabase signaling
+channel to exchange the SDP offer/answer and ICE candidates, resulting in an
+open `RTCDataChannel` between the two browsers. Once that DataChannel opens,
+the signaling channel is disconnected — everything after that is direct
+peer-to-peer, no server involved.
+
+- `lib/webrtc-config.ts` — `RTCConfiguration` with a public STUN server (no
+  TURN yet — see Milestone 6)
+- `hooks/usePeerConnection.ts` — wraps `useSignalingChannel` to run the
+  offer/answer/ICE handshake and exposes `connectionState`, `sendData`,
+  `onData`, `disconnect`
+- `app/page.tsx` / `app/join/page.tsx` — updated to use `usePeerConnection`
+  instead of raw signaling broadcasts for the test message box
+
+### Manual test: two-tab P2P handshake
+
+1. Open the app in two browser tabs (Tab A and Tab B) on the same network.
+2. In **Tab A**, click **Create Room**. It should move through **"Waiting for
+   peer..."** → **"Connecting (WebRTC handshake)..."**.
+3. In **Tab B**, go to **Join a room**, paste the room ID, and click **Join**.
+4. Both tabs should reach **"Connected (P2P)"**, each showing the note that
+   the signaling server has disconnected.
+5. In browser dev tools (Network tab, WS filter), confirm the Supabase
+   WebSocket connection for that room is closed/unsubscribed once connected.
+6. Type a message in Tab A's input and send it — it should appear in Tab B's
+   message list (and vice versa), with the Supabase channel already
+   disconnected, proving the data is going peer-to-peer and not through the
+   server.
+7. Repeat on two different physical devices on the same Wi-Fi network (not
+   just two tabs on one machine) to confirm real P2P behavior.
+8. Refresh either tab — it should require re-doing the room join flow from
+   scratch (no auto-reconnect yet; that's Milestone 6).
+
+> **Note on STUN-only connectivity:** only a public STUN server is configured
+> right now. If either side is behind a strict/symmetric NAT or a corporate
+> firewall, the handshake can hit a **"Connection failed"** state — that's
+> expected until Milestone 6 adds a TURN server.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

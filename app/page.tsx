@@ -3,43 +3,41 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { generateRoomId } from "@/lib/roomId";
-import { useSignalingChannel } from "@/hooks/useSignalingChannel";
+import { usePeerConnection } from "@/hooks/usePeerConnection";
 import { StatusPill } from "@/components/StatusPill";
 import { CopyButton } from "@/components/CopyButton";
 import { MessageLog, type LogMessage } from "@/components/MessageLog";
 
 export default function CreateRoomPage() {
   const [roomId, setRoomId] = useState<string | null>(null);
-  const [peerJoined, setPeerJoined] = useState(false);
   const [messages, setMessages] = useState<LogMessage[]>([]);
   const [draft, setDraft] = useState("");
 
-  const { sendMessage, onMessage, status } = useSignalingChannel(roomId ?? "");
+  const { connectionState, sendData, onData } = usePeerConnection(roomId ?? "", "sender");
 
   useEffect(() => {
     if (!roomId) return;
 
-    const offPeerJoined = onMessage("peer-joined", () => setPeerJoined(true));
-    const offTestMessage = onMessage("test-message", (payload) => {
-      const text = (payload as { text: string }).text;
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), text, from: "peer" }]);
+    const offData = onData((data) => {
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), text: data, from: "peer" }]);
     });
 
-    return () => {
-      offPeerJoined();
-      offTestMessage();
-    };
-  }, [roomId, onMessage]);
+    return offData;
+  }, [roomId, onData]);
 
   const handleCreateRoom = () => {
     setRoomId(generateRoomId());
-    setPeerJoined(false);
+    setMessages([]);
+  };
+
+  const handleRetry = () => {
+    setRoomId(null);
     setMessages([]);
   };
 
   const handleSend = () => {
     if (!draft.trim()) return;
-    sendMessage("test-message", { text: draft });
+    sendData(draft);
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), text: draft, from: "me" }]);
     setDraft("");
   };
@@ -70,12 +68,34 @@ export default function CreateRoomPage() {
             <CopyButton value={roomId} />
           </div>
 
-          {status === "error" ? (
-            <StatusPill label="Connection error" tone="bad" />
-          ) : status === "connecting" ? (
-            <StatusPill label="Connecting..." tone="neutral" />
-          ) : peerJoined ? (
-            <StatusPill label="Peer connected" tone="good" />
+          {connectionState === "failed" ? (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <StatusPill label="Connection failed" tone="bad" />
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Start a new room
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">
+                This can happen without a TURN server if either side is on a
+                restrictive network (added in a later milestone).
+              </p>
+            </div>
+          ) : connectionState === "disconnected" ? (
+            <StatusPill label="Disconnected" tone="bad" />
+          ) : connectionState === "connecting" ? (
+            <StatusPill label="Connecting (WebRTC handshake)..." tone="neutral" />
+          ) : connectionState === "connected" ? (
+            <div className="flex flex-col gap-1">
+              <StatusPill label="Connected (P2P)" tone="good" />
+              <p className="text-xs text-gray-500">
+                Signaling server disconnected — you&apos;re now directly connected.
+              </p>
+            </div>
           ) : (
             <StatusPill label="Waiting for peer..." tone="neutral" />
           )}
@@ -93,7 +113,7 @@ export default function CreateRoomPage() {
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={status !== "connected"}
+                disabled={connectionState !== "connected"}
                 className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 Send

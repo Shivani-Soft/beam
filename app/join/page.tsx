@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { useSignalingChannel } from "@/hooks/useSignalingChannel";
+import { useEffect, useState } from "react";
+import { usePeerConnection } from "@/hooks/usePeerConnection";
 import { StatusPill } from "@/components/StatusPill";
 import { MessageLog, type LogMessage } from "@/components/MessageLog";
 
@@ -11,47 +11,36 @@ export default function JoinRoomPage() {
   const [joinedRoomId, setJoinedRoomId] = useState<string | null>(null);
   const [messages, setMessages] = useState<LogMessage[]>([]);
   const [draft, setDraft] = useState("");
-  const hasAnnouncedJoin = useRef(false);
 
-  const { sendMessage, onMessage, status } = useSignalingChannel(joinedRoomId ?? "");
-
-  // Announce our presence to the sender as soon as the channel is live.
-  useEffect(() => {
-    if (status === "connected" && !hasAnnouncedJoin.current) {
-      hasAnnouncedJoin.current = true;
-      sendMessage("peer-joined", {});
-    }
-  }, [status, sendMessage]);
+  const { connectionState, sendData, onData } = usePeerConnection(
+    joinedRoomId ?? "",
+    "receiver"
+  );
 
   useEffect(() => {
     if (!joinedRoomId) return;
 
-    const offTestMessage = onMessage("test-message", (payload) => {
-      const text = (payload as { text: string }).text;
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), text, from: "peer" }]);
+    const offData = onData((data) => {
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), text: data, from: "peer" }]);
     });
 
-    return () => {
-      offTestMessage();
-    };
-  }, [joinedRoomId, onMessage]);
+    return offData;
+  }, [joinedRoomId, onData]);
 
   const handleJoin = () => {
     const trimmed = roomIdInput.trim().toUpperCase();
     if (!trimmed) return;
-    hasAnnouncedJoin.current = false;
     setMessages([]);
     setJoinedRoomId(trimmed);
   };
 
   const handleRetry = () => {
     setJoinedRoomId(null);
-    hasAnnouncedJoin.current = false;
   };
 
   const handleSend = () => {
     if (!draft.trim()) return;
-    sendMessage("test-message", { text: draft });
+    sendData(draft);
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), text: draft, from: "me" }]);
     setDraft("");
   };
@@ -86,9 +75,26 @@ export default function JoinRoomPage() {
 
       {joinedRoomId && (
         <section className="flex flex-col gap-4">
-          {status === "error" ? (
+          {connectionState === "failed" ? (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <StatusPill label="Connection failed" tone="bad" />
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Try a different room ID
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">
+                This can happen without a TURN server if either side is on a
+                restrictive network (added in a later milestone).
+              </p>
+            </div>
+          ) : connectionState === "disconnected" ? (
             <div className="flex items-center gap-3">
-              <StatusPill label="Connection error" tone="bad" />
+              <StatusPill label="Disconnected" tone="bad" />
               <button
                 type="button"
                 onClick={handleRetry}
@@ -97,10 +103,17 @@ export default function JoinRoomPage() {
                 Try a different room ID
               </button>
             </div>
-          ) : status === "connecting" ? (
-            <StatusPill label="Connecting..." tone="neutral" />
+          ) : connectionState === "connecting" ? (
+            <StatusPill label="Connecting (WebRTC handshake)..." tone="neutral" />
+          ) : connectionState === "connected" ? (
+            <div className="flex flex-col gap-1">
+              <StatusPill label={`Connected to room ${joinedRoomId} (P2P)`} tone="good" />
+              <p className="text-xs text-gray-500">
+                Signaling server disconnected — you&apos;re now directly connected.
+              </p>
+            </div>
           ) : (
-            <StatusPill label={`Connected to room ${joinedRoomId}`} tone="good" />
+            <StatusPill label="Connecting..." tone="neutral" />
           )}
 
           <div className="flex flex-col gap-2 rounded-lg border border-gray-200 p-4">
@@ -116,7 +129,7 @@ export default function JoinRoomPage() {
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={status !== "connected"}
+                disabled={connectionState !== "connected"}
                 className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 Send
