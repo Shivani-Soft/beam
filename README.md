@@ -99,6 +99,43 @@ peer-to-peer, no server involved.
 > firewall, the handshake can hit a **"Connection failed"** state — that's
 > expected until Milestone 6 adds a TURN server.
 
+## Milestone 3: Chat over the DataChannel
+
+This milestone replaces the Milestone 2 raw test-string box with a real chat
+feature: a typed, extensible message protocol over the DataChannel, a proper
+chat UI, and a clear "connection lost" state if the peer drops mid-chat.
+
+- `lib/messageTypes.ts` — `ChatMessage` / `DataChannelMessage` discriminated
+  union sent over the wire (JSON-stringified in, JSON-parsed + narrowed by
+  `type` out); more variants (file-meta, file-chunk, ...) get added here in
+  Milestone 4
+- `hooks/useChat.ts` — wraps a `usePeerConnection` result into
+  `messages` / `sendMessage()`, with sent messages added optimistically and
+  unrecognized incoming message types ignored (logged, not thrown)
+- `components/ChatPanel.tsx` — scrollable message list (sender/receiver
+  bubbles, timestamps, auto-scroll, empty state), input that's disabled
+  whenever `connectionState !== 'connected'`, and a banner when the
+  connection is lost mid-chat
+- `app/page.tsx` / `app/join/page.tsx` — render `<ChatPanel />` below the
+  existing connection status indicator
+
+### Manual test: two-tab chat
+
+1. Connect two tabs per the Milestone 2 flow — the chat panel appears once
+   `roomId` exists, with input disabled until the status reads **"Connected
+   (P2P)"**.
+2. Send a message from Tab A — it appears immediately in Tab A's own list
+   (right-aligned, blue bubble), then shortly after in Tab B's list
+   (left-aligned, grey bubble).
+3. Send several messages back-to-back from both tabs — both sides should
+   keep correct chronological order, not reordered or dropped.
+4. Close Tab B. Tab A's status should move to **"Disconnected"**, a
+   **"Connection lost — messages can no longer be sent"** banner should
+   appear in the chat panel, the input should disable, and all prior
+   messages from the session should remain visible.
+5. Refresh either tab — chat history clears (expected, no persistence yet)
+   and the room join flow has to be redone from scratch.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -1,48 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePeerConnection } from "@/hooks/usePeerConnection";
 import { StatusPill } from "@/components/StatusPill";
-import { MessageLog, type LogMessage } from "@/components/MessageLog";
+import { ChatPanel } from "@/components/ChatPanel";
 
 export default function JoinRoomPage() {
   const [roomIdInput, setRoomIdInput] = useState("");
   const [joinedRoomId, setJoinedRoomId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<LogMessage[]>([]);
-  const [draft, setDraft] = useState("");
 
-  const { connectionState, sendData, onData } = usePeerConnection(
-    joinedRoomId ?? "",
-    "receiver"
-  );
-
-  useEffect(() => {
-    if (!joinedRoomId) return;
-
-    const offData = onData((data) => {
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), text: data, from: "peer" }]);
-    });
-
-    return offData;
-  }, [joinedRoomId, onData]);
+  const peerConnection = usePeerConnection(joinedRoomId ?? "", "receiver");
+  const { connectionState } = peerConnection;
 
   const handleJoin = () => {
     const trimmed = roomIdInput.trim().toUpperCase();
     if (!trimmed) return;
-    setMessages([]);
     setJoinedRoomId(trimmed);
   };
 
   const handleRetry = () => {
     setJoinedRoomId(null);
-  };
-
-  const handleSend = () => {
-    if (!draft.trim()) return;
-    sendData(draft);
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), text: draft, from: "me" }]);
-    setDraft("");
   };
 
   return (
@@ -116,26 +94,7 @@ export default function JoinRoomPage() {
             <StatusPill label="Connecting..." tone="neutral" />
           )}
 
-          <div className="flex flex-col gap-2 rounded-lg border border-gray-200 p-4">
-            <MessageLog messages={messages} />
-            <div className="flex gap-2">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Type a test message"
-                className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-              />
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={connectionState !== "connected"}
-                className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                Send
-              </button>
-            </div>
-          </div>
+          <ChatPanel peerConnection={peerConnection} />
         </section>
       )}
     </main>
