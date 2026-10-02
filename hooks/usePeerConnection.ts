@@ -242,6 +242,30 @@ export function usePeerConnection(roomId: string, role: "sender" | "receiver") {
     }
   }, []);
 
+  const isOpen = useCallback(() => dcRef.current?.readyState === "open", []);
+
+  const getBufferedAmount = useCallback(() => dcRef.current?.bufferedAmount ?? 0, []);
+
+  // Lets a caller doing its own chunked/paced sending (e.g. file transfer)
+  // wait out backpressure instead of flooding dc.send() past bufferedAmount.
+  const waitForBufferedAmountBelow = useCallback((threshold: number) => {
+    return new Promise<void>((resolve) => {
+      const dc = dcRef.current;
+      if (!dc || dc.bufferedAmount <= threshold) {
+        resolve();
+        return;
+      }
+      const onDrainOrClose = () => {
+        dc.removeEventListener("bufferedamountlow", onDrainOrClose);
+        dc.removeEventListener("close", onDrainOrClose);
+        resolve();
+      };
+      dc.bufferedAmountLowThreshold = threshold;
+      dc.addEventListener("bufferedamountlow", onDrainOrClose);
+      dc.addEventListener("close", onDrainOrClose);
+    });
+  }, []);
+
   const onData = useCallback((callback: DataListener) => {
     dataListenersRef.current.add(callback);
     return () => {
@@ -258,5 +282,13 @@ export function usePeerConnection(roomId: string, role: "sender" | "receiver") {
     setConnectionState("disconnected");
   }, [disconnectSignaling]);
 
-  return { connectionState, sendData, onData, disconnect };
+  return {
+    connectionState,
+    sendData,
+    onData,
+    disconnect,
+    isOpen,
+    getBufferedAmount,
+    waitForBufferedAmountBelow,
+  };
 }

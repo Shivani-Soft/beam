@@ -27,7 +27,14 @@ export function useChat(peerConnection: ReturnType<typeof usePeerConnection>) {
 
       if (parsed.type === "chat") {
         setMessages((prev) => [...prev, { ...parsed, from: "peer" }]);
-      } else {
+      } else if (
+        parsed.type !== "file-meta" &&
+        parsed.type !== "file-chunk" &&
+        parsed.type !== "file-complete"
+      ) {
+        // Known-but-foreign types (file transfer messages, handled by
+        // useFileTransfer) are expected and silently skipped; only warn on
+        // something genuinely unrecognized.
         console.warn("useChat: ignoring unrecognized message type", parsed);
       }
     });

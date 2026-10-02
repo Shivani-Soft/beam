@@ -6,7 +6,7 @@ import { generateRoomId } from "@/lib/roomId";
 import { usePeerConnection } from "@/hooks/usePeerConnection";
 import { StatusPill } from "@/components/StatusPill";
 import { CopyButton } from "@/components/CopyButton";
-import { ChatPanel } from "@/components/ChatPanel";
+import { SessionPanels } from "@/components/SessionPanels";
 
 export default function CreateRoomPage() {
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -80,7 +80,7 @@ export default function CreateRoomPage() {
             <StatusPill label="Waiting for peer..." tone="neutral" />
           )}
 
-          <ChatPanel peerConnection={peerConnection} />
+          <SessionPanels peerConnection={peerConnection} />
         </section>
       )}
     </main>

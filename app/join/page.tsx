@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { usePeerConnection } from "@/hooks/usePeerConnection";
 import { StatusPill } from "@/components/StatusPill";
-import { ChatPanel } from "@/components/ChatPanel";
+import { SessionPanels } from "@/components/SessionPanels";
 
 export default function JoinRoomPage() {
   const [roomIdInput, setRoomIdInput] = useState("");
@@ -94,7 +94,7 @@ export default function JoinRoomPage() {
             <StatusPill label="Connecting..." tone="neutral" />
           )}
 
-          <ChatPanel peerConnection={peerConnection} />
+          <SessionPanels peerConnection={peerConnection} />
         </section>
       )}
     </main>

@@ -136,6 +136,57 @@ chat UI, and a clear "connection lost" state if the peer drops mid-chat.
 5. Refresh either tab — chat history clears (expected, no persistence yet)
    and the room join flow has to be redone from scratch.
 
+## Milestone 4: File transfer over the DataChannel
+
+This milestone adds chunked file transfer on the same DataChannel chat
+already uses, with backpressure handling so large files don't blow up
+browser memory, and SHA-256 checksum verification so silent corruption on
+a large transfer gets caught instead of ignored.
+
+- `lib/messageTypes.ts` — adds `FileMeta` / `FileChunk` / `FileComplete` to
+  `DataChannelMessage`. Chunks stay base64-in-JSON (not raw binary frames)
+  to keep one consistent message format with chat on the same channel —
+  documented tradeoff, see the file header comment in
+  `hooks/useFileTransfer.ts`
+- `hooks/usePeerConnection.ts` — gained `isOpen()`, `getBufferedAmount()`,
+  and `waitForBufferedAmountBelow(threshold)` so a chunked sender can pace
+  itself against `RTCDataChannel.bufferedAmount` instead of flooding the
+  channel
+- `hooks/useFileTransfer.ts` — `sendFile(file)` chunks at 16KB, pausing
+  whenever `bufferedAmount` exceeds 1MB until the channel's
+  `bufferedamountlow` event fires; computes a whole-file SHA-256 and sends
+  it in `file-complete`. On receive, chunks are reassembled by index into a
+  `Blob`, re-hashed, and compared against the sender's checksum — a
+  mismatch (or a dropped connection mid-transfer) marks the transfer
+  **failed** rather than silently accepting bad data
+- `components/FileTransferPanel.tsx` — file picker, per-transfer progress
+  bars (sending/receiving), and download links for completed files
+- `components/SessionPanels.tsx` — tabs Chat/Files above `ChatPanel` and
+  `FileTransferPanel`; both stay mounted (just hidden) when switching tabs
+  so neither chat history nor in-flight transfer progress resets
+- `app/page.tsx` / `app/join/page.tsx` — render `<SessionPanels />` instead
+  of `<ChatPanel />` directly
+
+### Manual test: file transfer
+
+1. Connect two tabs, switch to the **Files** tab on either side.
+2. Send a small image (a few KB) from Tab A — it finishes almost
+   instantly on both sides, and Tab B's **Download** link opens/displays it
+   correctly.
+3. Send a large file (100MB+) — the progress bar advances smoothly on both
+   sides without freezing the tab, completes on both ends, and the transfer
+   shows as succeeded (no checksum-mismatch failure banner).
+4. Send two or three files back-to-back (one at a time — the file input
+   disables itself while a send is in progress) — each arrives complete and
+   distinct, with no mixed-up chunks between files.
+5. In Chrome DevTools, throttle the network (Network tab → Slow 3G/custom)
+   and send a medium-sized file — confirm the transfer still completes
+   (just slower) instead of hanging forever or spiking memory, proving
+   `bufferedAmount` backpressure is actually pausing sends.
+6. While a file is mid-transfer, send a chat message on the **Chat** tab —
+   confirm it arrives normally and doesn't interrupt or corrupt the file
+   transfer in progress.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
